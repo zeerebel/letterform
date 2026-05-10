@@ -377,15 +377,17 @@
 
       const interps = [];
       const maxN = Math.max(subsA.length, subsB.length);
+      // Tighter sampling = denser polygons internally, so curves read smooth in mid-frames.
+      const flubberOpts = { maxSegmentLength: 3 };
       for (let j = 0; j < maxN; j++) {
         const sa = subsA[j], sb = subsB[j];
         try {
           if (sa && sb) {
-            interps.push(flubber.interpolate(sa.d, sb.d, { maxSegmentLength: 8 }));
+            interps.push(flubber.interpolate(sa.d, sb.d, flubberOpts));
           } else if (sa && !sb) {
-            interps.push(flubber.toCircle(sa.d, vanishB.x, vanishB.y, 0.001, { maxSegmentLength: 8 }));
+            interps.push(flubber.toCircle(sa.d, vanishB.x, vanishB.y, 0.001, flubberOpts));
           } else if (!sa && sb) {
-            interps.push(flubber.fromCircle(vanishA.x, vanishA.y, 0.001, sb.d, { maxSegmentLength: 8 }));
+            interps.push(flubber.fromCircle(vanishA.x, vanishA.y, 0.001, sb.d, flubberOpts));
           }
         } catch (e) {
           console.warn('subpath interp failed', e);
@@ -435,9 +437,13 @@
       strip.style.setProperty('--frame-aspect', `${frameA.toFixed(3)} / 1`);
     }
 
+    // Cubic ease-in-out: settles into shape near the endpoints instead of marching linearly.
+    const ease = u => u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+
     const svgNS = 'http://www.w3.org/2000/svg';
     for (let i = 0; i < steps; i++) {
-      const t = steps === 1 ? 0 : i / (steps - 1);
+      const u = steps === 1 ? 0 : i / (steps - 1);
+      const t = ease(u);
       const frame = document.createElement('div');
       frame.className = 'frame' + (i === 0 || i === steps - 1 ? ' endpoint' : '');
 
@@ -448,7 +454,7 @@
 
       const pct = document.createElement('div');
       pct.className = 'step-pct';
-      pct.textContent = i === 0 ? fontNameA : (i === steps - 1 ? fontNameB : Math.round(t * 100) + '%');
+      pct.textContent = i === 0 ? fontNameA : (i === steps - 1 ? fontNameB : Math.round(u * 100) + '%');
       frame.appendChild(pct);
 
       const svg = document.createElementNS(svgNS, 'svg');
