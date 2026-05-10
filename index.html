@@ -126,7 +126,11 @@
     display: flex; align-items: center; justify-content: center;
     padding: 18px 12px 26px;
     min-height: 0; min-width: 0;
+    cursor: pointer;
   }
+  .frame:hover { background: var(--soft); }
+  .frame:hover .step-num,
+  .frame:hover .step-pct { color: var(--ink); }
   .strip.horizontal .frame { aspect-ratio: var(--frame-aspect, 4/5); border-right: 1px solid var(--ink); }
   .strip.horizontal .frame:last-child { border-right: none; }
   .strip.vertical   .frame { aspect-ratio: var(--frame-aspect, 8/1); border-bottom: 1px solid var(--ink); padding: 22px 32px 30px; }
@@ -472,8 +476,33 @@
       p.setAttribute('fill-rule', 'evenodd');
       svg.appendChild(p);
       frame.appendChild(svg);
+
+      const stepNum = i + 1;
+      const stepPct = Math.round(u * 100);
+      frame.title = `Click to download SVG — frame ${stepNum} of ${steps} (${stepPct}%)`;
+      frame.addEventListener('click', () => downloadFrameSvg(svg, stepNum, steps));
+
       strip.appendChild(frame);
     }
+  }
+
+  function downloadFrameSvg(svgEl, stepNum, totalSteps) {
+    const a = document.getElementById('word-a').value.trim() || 'a';
+    const b = document.getElementById('word-b').value.trim() || 'b';
+    const safe = s => s.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'x';
+    const clone = svgEl.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const path = clone.querySelector('path');
+    if (path) path.setAttribute('fill', '#0a0a0a');
+    const src = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+    const url = URL.createObjectURL(new Blob([src], { type: 'image/svg+xml' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `letter-morph_${safe(a)}-to-${safe(b)}_frame-${String(stepNum).padStart(2, '0')}-of-${totalSteps}.svg`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   // ───────── Wire up ─────────
