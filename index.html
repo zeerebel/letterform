@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Letter Morph — Type Your Own</title>
+<script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flubber@0.4.2/build/flubber.min.js"></script>
+<style>
+  :root {
+    --ink: #0a0a0a;
+    --paper: #ffffff;
+    --rule: #0a0a0a;
+    --muted: #8a8a8a;
+    --soft: #f1f1ef;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--paper); color: var(--ink); }
+  body {
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* ───────── Header / Title bar ───────── */
+  header {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: end;
+    gap: 24px;
+    padding: 28px 40px 14px;
+    border-bottom: 1px solid var(--ink);
+  }
+  .meta { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; line-height: 1.6; }
+  .meta.r { text-align: right; }
+  .meta span { color: var(--muted); }
+  h1 {
+    font-family: "Times New Roman", "Times", serif;
+    font-weight: 400; font-style: italic;
+    font-size: 22px; letter-spacing: 0.01em;
+    margin: 0; text-align: center; white-space: nowrap;
+  }
+
+  /* ───────── Controls ───────── */
+  .controls {
+    display: grid;
+    grid-template-columns: 1fr 24px 1fr 220px;
+    gap: 0;
+    border-bottom: 1px solid var(--ink);
+    background: var(--paper);
+  }
+  .field {
+    border-right: 1px solid var(--ink);
+    padding: 14px 20px 16px;
+    display: flex; flex-direction: column; gap: 8px;
+    min-width: 0;
+  }
+  .field:last-child { border-right: none; }
+  .field label {
+    font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--muted);
+  }
+  .field .row { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
+  .text-input {
+    border: none; outline: none; background: transparent; color: var(--ink);
+    font-family: "Times New Roman", serif;
+    font-size: 38px; font-weight: 700;
+    width: 100%; min-width: 0;
+    padding: 0; letter-spacing: 0.01em;
+  }
+  .text-input::placeholder { color: var(--muted); font-style: italic; font-weight: 400; }
+  .font-select {
+    border: none; outline: none; background: transparent;
+    font-family: inherit;
+    font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--ink); cursor: pointer;
+    padding: 0; appearance: none; -webkit-appearance: none;
+    background-image: linear-gradient(45deg, transparent 50%, var(--ink) 50%),
+                      linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+    background-position: right 0 top 6px, right 4px top 6px;
+    background-size: 4px 4px, 4px 4px;
+    background-repeat: no-repeat;
+    padding-right: 14px;
+  }
+  .arrow {
+    border-right: 1px solid var(--ink);
+    display: flex; align-items: center; justify-content: center;
+    font-family: "Times New Roman", serif; font-size: 28px; font-style: italic;
+    color: var(--ink);
+  }
+  .steps-field { display: flex; flex-direction: column; gap: 8px; }
+  .steps-row { display: flex; align-items: center; gap: 10px; }
+  .steps-row input[type="range"] {
+    flex: 1; accent-color: var(--ink); height: 2px;
+  }
+  .steps-num {
+    font-family: "Times New Roman", serif; font-size: 28px; font-weight: 700;
+    width: 40px; text-align: right;
+  }
+  .render-btn {
+    margin-top: 6px;
+    border: 1px solid var(--ink); background: var(--ink); color: var(--paper);
+    font-family: inherit; font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+    padding: 8px 12px; cursor: pointer;
+  }
+  .render-btn:hover { background: var(--paper); color: var(--ink); }
+  .render-btn:disabled { opacity: 0.4; cursor: wait; }
+
+  .upload-btn {
+    display: block;
+    margin-top: 4px;
+    border: 1px dashed var(--ink);
+    background: var(--paper); color: var(--ink);
+    font-family: inherit; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+    padding: 7px 10px; cursor: pointer; text-align: center;
+  }
+  .upload-btn:hover { background: var(--soft); }
+  .upload-btn input { display: none; }
+
+  /* ───────── Strip ───────── */
+  main {
+    flex: 1;
+    padding: 40px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .strip {
+    width: 100%;
+    border-top: 1px solid var(--ink);
+    border-bottom: 1px solid var(--ink);
+    display: grid;
+    gap: 0;
+  }
+  .strip.horizontal { grid-template-columns: repeat(var(--cols), 1fr); }
+  .strip.vertical   { grid-template-columns: 1fr; }
+  .frame {
+    position: relative;
+    display: flex; align-items: center; justify-content: center;
+    padding: 18px 12px 26px;
+    min-height: 0; min-width: 0;
+    cursor: pointer;
+  }
+  .frame:hover { background: var(--soft); }
+  .frame:hover .step-num,
+  .frame:hover .step-pct { color: var(--ink); }
+  .strip.horizontal .frame { aspect-ratio: var(--frame-aspect, 4/5); border-right: 1px solid var(--ink); }
+  .strip.horizontal .frame:last-child { border-right: none; }
+  .strip.vertical   .frame { aspect-ratio: var(--frame-aspect, 8/1); border-bottom: 1px solid var(--ink); padding: 22px 32px 30px; }
+  .strip.vertical   .frame:last-child { border-bottom: none; }
+  .frame svg { width: 100%; height: 100%; display: block; }
+  .frame svg path { fill: var(--ink); }
+
+  .step-num {
+    position: absolute;
+    top: 8px; left: 12px;
+    font-size: 9px; letter-spacing: 0.16em; color: var(--muted);
+  }
+  .step-pct {
+    position: absolute;
+    bottom: 8px; left: 0; right: 0; text-align: center;
+    font-size: 9px; letter-spacing: 0.18em; color: var(--muted);
+  }
+  .strip.vertical .step-num { left: 18px; }
+  .strip.vertical .step-pct { bottom: 6px; left: 18px; right: auto; text-align: left; }
+  .frame.endpoint .step-num { color: var(--ink); font-weight: 700; }
+
+  .status {
+    grid-column: 1 / -1;
+    height: 320px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted);
+    font-size: 11px; letter-spacing: 0.2em; text-transform: uppercase;
+    text-align: center; padding: 0 24px;
+  }
+  .status.err { color: #b00020; text-transform: none; letter-spacing: 0; font-size: 12px; line-height: 1.5; }
+
+  /* ───────── Footer ───────── */
+  footer {
+    padding: 14px 40px;
+    border-top: 1px solid var(--ink);
+    display: grid; grid-template-columns: 1fr 1fr; gap: 24px;
+    font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  }
+  footer .l { display: flex; gap: 18px; align-items: center; }
+  footer .r { text-align: right; color: var(--muted); }
+  .swatch { display: inline-flex; gap: 6px; align-items: center; }
+  .swatch::before { content: ""; width: 10px; height: 10px; background: var(--ink); display: inline-block; }
+  .swatch.paper::before { background: var(--paper); border: 1px solid var(--ink); }
+
+  @media (max-width: 900px) {
+    .controls { grid-template-columns: 1fr; }
+    .field { border-right: none; border-bottom: 1px solid var(--ink); }
+    .arrow { display: none; }
+    header { grid-template-columns: 1fr; }
+    .meta.r { text-align: left; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="meta l">
+    <div><span>Source A — </span><span id="meta-a">Bodoni Moda Black</span></div>
+    <div><span>Form — </span>Modern serif · High contrast</div>
+  </div>
+  <h1>A Morphology · Type your own</h1>
+  <div class="meta r">
+    <div><span id="meta-b">Jost Black</span><span> — Source B</span></div>
+    <div>Geometric sans · Monoline<span> — Form</span></div>
+  </div>
+</header>
+
+<section class="controls">
+  <div class="field">
+    <label>Source A — text</label>
+    <input id="word-a" class="text-input" type="text" value="g" maxlength="12" autocomplete="off" spellcheck="false">
+    <div class="row">
+      <select id="font-a" class="font-select"></select>
+    </div>
+  </div>
+  <div class="arrow">→</div>
+  <div class="field">
+    <label>Source B — text</label>
+    <input id="word-b" class="text-input" type="text" value="g" maxlength="12" autocomplete="off" spellcheck="false">
+    <div class="row">
+      <select id="font-b" class="font-select"></select>
+    </div>
+  </div>
+  <div class="field steps-field">
+    <label>Steps</label>
+    <div class="steps-row">
+      <input id="steps" type="range" min="3" max="20" value="10" step="1">
+      <div id="steps-num" class="steps-num">10</div>
+    </div>
+    <button id="render" class="render-btn">Render Morph</button>
+    <label class="upload-btn" title="Upload .otf / .ttf / .woff files — they appear in both dropdowns">
+      + Custom Typeface
+      <input id="custom-font" type="file" accept=".otf,.ttf,.woff,.woff2" multiple>
+    </label>
+  </div>
+</section>
+
+<main>
+  <div class="strip horizontal" id="strip" style="--cols:10;">
+    <div class="status">Loading typefaces…</div>
+  </div>
+</main>
+
+<footer>
+  <div class="l">
+    <span class="swatch">Ink #0A0A0A</span>
+    <span class="swatch paper">Paper #FFFFFF</span>
+  </div>
+  <div class="r">Plate 02 · Editable Specimen</div>
+</footer>
+
+<script>
+(() => {
+  // ───────── Curated typeface library (Fontsource WOFF, latin) ─────────
+  const fontUrl = (slug, weight) =>
+    `https://cdn.jsdelivr.net/npm/@fontsource/${slug}/files/${slug}-latin-${weight}-normal.woff`;
+
+  const FONT_LIB = {
+    'bodoni':     { name: 'Bodoni Moda Black',      url: fontUrl('bodoni-moda',        '900') },
+    'playfair':   { name: 'Playfair Display Black', url: fontUrl('playfair-display',   '900') },
+    'fraunces':   { name: 'Fraunces Black',         url: fontUrl('fraunces',           '900') },
+    'abril':      { name: 'Abril Fatface',          url: fontUrl('abril-fatface',      '400') },
+    'yeseva':     { name: 'Yeseva One',             url: fontUrl('yeseva-one',         '400') },
+    'jost':       { name: 'Jost Black',             url: fontUrl('jost',               '900') },
+    'archivo':    { name: 'Archivo Black',          url: fontUrl('archivo-black',      '400') },
+    'anton':      { name: 'Anton',                  url: fontUrl('anton',              '400') },
+    'bungee':     { name: 'Bungee',                 url: fontUrl('bungee',             '400') },
+    'kanit':      { name: 'Kanit Black',            url: fontUrl('kanit',              '900') },
+    'rubik-mono': { name: 'Rubik Mono One',         url: fontUrl('rubik-mono-one',     '400') },
+    'krona':      { name: 'Krona One',              url: fontUrl('krona-one',          '400') },
+    'comfortaa':  { name: 'Comfortaa Bold',         url: fontUrl('comfortaa',          '700') },
+    'major-mono': { name: 'Major Mono Display',     url: fontUrl('major-mono-display', '400') },
+  };
+
+  const fontCache = new Map();
+  function loadFont(key) {
+    if (fontCache.has(key)) return fontCache.get(key);
+    const entry = FONT_LIB[key];
+    const p = entry.font
+      ? Promise.resolve(entry.font)
+      : new Promise((res, rej) => opentype.load(entry.url, (err, font) => err ? rej(err) : res(font)));
+    fontCache.set(key, p);
+    return p;
+  }
+
+  const selA = document.getElementById('font-a');
+  const selB = document.getElementById('font-b');
+  for (const [k, v] of Object.entries(FONT_LIB)) {
+    selA.appendChild(new Option(v.name, k));
+    selB.appendChild(new Option(v.name, k));
+  }
+  selA.value = 'bodoni';
+  selB.value = 'jost';
+
+  // ───────── Path utilities ─────────
+  function pathToSubpaths(path) {
+    const subs = [];
+    let cur = [];
+    for (const c of path.commands) {
+      if (c.type === 'M' && cur.length) { subs.push(cur); cur = []; }
+      cur.push(c);
+    }
+    if (cur.length) subs.push(cur);
+    return subs.map(commandsToD);
+  }
+  function commandsToD(cmds) {
+    const f = (n) => Number(n.toFixed(3));
+    return cmds.map(c => {
+      switch (c.type) {
+        case 'M': return `M${f(c.x)},${f(c.y)}`;
+        case 'L': return `L${f(c.x)},${f(c.y)}`;
+        case 'C': return `C${f(c.x1)},${f(c.y1)} ${f(c.x2)},${f(c.y2)} ${f(c.x)},${f(c.y)}`;
+        case 'Q': return `Q${f(c.x1)},${f(c.y1)} ${f(c.x)},${f(c.y)}`;
+        case 'Z': return 'Z';
+        default: return '';
+      }
+    }).join(' ');
+  }
+  function pathArea(d) {
+    const pts = [];
+    const re = /([MLCQ])([^MLCQZ]*)/g;
+    let m;
+    while ((m = re.exec(d)) !== null) {
+      const nums = m[2].trim().split(/[\s,]+/).filter(Boolean).map(Number);
+      if (m[1] === 'M' || m[1] === 'L') pts.push([nums[0], nums[1]]);
+      else if (m[1] === 'Q') pts.push([nums[2], nums[3]]);
+      else if (m[1] === 'C') pts.push([nums[4], nums[5]]);
+    }
+    let a = 0;
+    for (let i = 0; i < pts.length; i++) {
+      const [x1, y1] = pts[i], [x2, y2] = pts[(i + 1) % pts.length];
+      a += x1 * y2 - x2 * y1;
+    }
+    return Math.abs(a) / 2;
+  }
+  function pathBBox(d) {
+    const re = /(-?\d+(?:\.\d+)?)/g;
+    const nums = (d.match(re) || []).map(Number);
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (let i = 0; i < nums.length - 1; i += 2) {
+      const x = nums[i], y = nums[i + 1];
+      if (x < minX) minX = x; if (x > maxX) maxX = x;
+      if (y < minY) minY = y; if (y > maxY) maxY = y;
+    }
+    return { minX, minY, maxX, maxY, cx: (minX + maxX) / 2, cy: (minY + maxY) / 2 };
+  }
+
+  // ───────── Word layout ─────────
+  function layoutWord(font, chars, FS) {
+    const items = [];
+    const scale = FS / font.unitsPerEm;
+    let x = 0;
+    for (const ch of chars) {
+      const g = font.charToGlyph(ch);
+      const adv = (g.advanceWidth || font.unitsPerEm) * scale;
+      const isSpace = ch === ' ';
+      items.push({ glyph: g, ch, x, advance: adv, isSpace });
+      x += adv;
+    }
+    return { items, total: x };
+  }
+
+  // ───────── Build morph for one word pair ─────────
+  async function buildMorph({ wordA, wordB, fontKeyA, fontKeyB }) {
+    const [fontA, fontB] = await Promise.all([loadFont(fontKeyA), loadFont(fontKeyB)]);
+    const FS = 1000;
+    const charsA = [...wordA];
+    const charsB = [...wordB];
+    const maxLen = Math.max(charsA.length, charsB.length);
+
+    const lA = layoutWord(fontA, charsA, FS);
+    const lB = layoutWord(fontB, charsB, FS);
+
+    const positions = [];
+    for (let i = 0; i < maxLen; i++) {
+      const a = lA.items[i];
+      const b = lB.items[i];
+
+      const aFallback = { x: lA.total + (i - charsA.length + 0.5) * FS * 0.6, y: -FS / 2 };
+      const bFallback = { x: lB.total + (i - charsB.length + 0.5) * FS * 0.6, y: -FS / 2 };
+
+      const pathA = a && !a.isSpace ? a.glyph.getPath(a.x, 0, FS) : null;
+      const pathB = b && !b.isSpace ? b.glyph.getPath(b.x, 0, FS) : null;
+
+      let subsA = pathA ? pathToSubpaths(pathA).map(d => ({ d, area: pathArea(d) })).sort((x, y) => y.area - x.area) : [];
+      let subsB = pathB ? pathToSubpaths(pathB).map(d => ({ d, area: pathArea(d) })).sort((x, y) => y.area - x.area) : [];
+
+      const aCenter = pathA ? pathBBox(commandsToD(pathA.commands)) : { cx: aFallback.x, cy: aFallback.y };
+      const bCenter = pathB ? pathBBox(commandsToD(pathB.commands)) : { cx: bFallback.x, cy: bFallback.y };
+      const vanishA = { x: a ? (a.x + a.advance / 2) : aCenter.cx, y: aCenter.cy };
+      const vanishB = { x: b ? (b.x + b.advance / 2) : bCenter.cx, y: bCenter.cy };
+
+      const interps = [];
+      const maxN = Math.max(subsA.length, subsB.length);
+      // Tighter sampling = denser polygons internally, so curves read smooth in mid-frames.
+      const flubberOpts = { maxSegmentLength: 3 };
+      for (let j = 0; j < maxN; j++) {
+        const sa = subsA[j], sb = subsB[j];
+        try {
+          if (sa && sb) {
+            interps.push(flubber.interpolate(sa.d, sb.d, flubberOpts));
+          } else if (sa && !sb) {
+            interps.push(flubber.toCircle(sa.d, vanishB.x, vanishB.y, 0.001, flubberOpts));
+          } else if (!sa && sb) {
+            interps.push(flubber.fromCircle(vanishA.x, vanishA.y, 0.001, sb.d, flubberOpts));
+          }
+        } catch (e) {
+          console.warn('subpath interp failed', e);
+        }
+      }
+      positions.push(interps);
+    }
+
+    const allDs = [];
+    for (const it of lA.items) if (!it.isSpace) allDs.push(...pathToSubpaths(it.glyph.getPath(it.x, 0, FS)));
+    for (const it of lB.items) if (!it.isSpace) allDs.push(...pathToSubpaths(it.glyph.getPath(it.x, 0, FS)));
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const d of allDs) {
+      const bb = pathBBox(d);
+      if (bb.minX < minX) minX = bb.minX;
+      if (bb.minY < minY) minY = bb.minY;
+      if (bb.maxX > maxX) maxX = bb.maxX;
+      if (bb.maxY > maxY) maxY = bb.maxY;
+    }
+    if (!isFinite(minX)) { minX = 0; minY = -FS; maxX = FS; maxY = 0; }
+    const padX = (maxX - minX) * 0.06 + 40;
+    const padY = (maxY - minY) * 0.10 + 40;
+    const vb = {
+      x: minX - padX,
+      y: minY - padY,
+      w: (maxX - minX) + padX * 2,
+      h: (maxY - minY) + padY * 2
+    };
+
+    return { positions, vb };
+  }
+
+  // ───────── Render a strip given morph data + step count ─────────
+  function renderStrip(morph, steps, fontNameA, fontNameB) {
+    const strip = document.getElementById('strip');
+    strip.innerHTML = '';
+
+    const aspect = morph.vb.w / morph.vb.h;
+    const vertical = aspect > 1.6;
+    strip.classList.toggle('horizontal', !vertical);
+    strip.classList.toggle('vertical', vertical);
+    strip.style.setProperty('--cols', String(steps));
+    if (vertical) {
+      strip.style.setProperty('--frame-aspect', `${aspect.toFixed(3)} / 1`);
+    } else {
+      const frameA = Math.max(0.6, Math.min(aspect * 0.9 + 0.2, 1.6));
+      strip.style.setProperty('--frame-aspect', `${frameA.toFixed(3)} / 1`);
+    }
+
+    // Cubic ease-in-out: settles into shape near the endpoints instead of marching linearly.
+    const ease = u => u < 0.5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+
+    const svgNS = 'http://www.w3.org/2000/svg';
+    for (let i = 0; i < steps; i++) {
+      const u = steps === 1 ? 0 : i / (steps - 1);
+      const t = ease(u);
+      const frame = document.createElement('div');
+      frame.className = 'frame' + (i === 0 || i === steps - 1 ? ' endpoint' : '');
+
+      const num = document.createElement('div');
+      num.className = 'step-num';
+      num.textContent = String(i + 1).padStart(2, '0');
+      frame.appendChild(num);
+
+      const pct = document.createElement('div');
+      pct.className = 'step-pct';
+      pct.textContent = i === 0 ? fontNameA : (i === steps - 1 ? fontNameB : Math.round(u * 100) + '%');
+      frame.appendChild(pct);
+
+      const svg = document.createElementNS(svgNS, 'svg');
+      svg.setAttribute('viewBox', `${morph.vb.x} ${morph.vb.y} ${morph.vb.w} ${morph.vb.h}`);
+      svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+      const ds = [];
+      for (const interps of morph.positions) {
+        for (const interp of interps) {
+          try { ds.push(interp(t)); } catch (e) { /* skip */ }
+        }
+      }
+      const p = document.createElementNS(svgNS, 'path');
+      p.setAttribute('d', ds.join(' '));
+      p.setAttribute('fill-rule', 'evenodd');
+      svg.appendChild(p);
+      frame.appendChild(svg);
+
+      const stepNum = i + 1;
+      const stepPct = Math.round(u * 100);
+      frame.title = `Click to download SVG — frame ${stepNum} of ${steps} (${stepPct}%)`;
+      frame.addEventListener('click', () => downloadFrameSvg(svg, stepNum, steps));
+
+      strip.appendChild(frame);
+    }
+  }
+
+  function downloadFrameSvg(svgEl, stepNum, totalSteps) {
+    const a = document.getElementById('word-a').value.trim() || 'a';
+    const b = document.getElementById('word-b').value.trim() || 'b';
+    const safe = s => s.replace(/[^a-z0-9]+/gi, '-').replace(/^-|-$/g, '').toLowerCase() || 'x';
+    const clone = svgEl.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    const path = clone.querySelector('path');
+    if (path) path.setAttribute('fill', '#0a0a0a');
+    const src = '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(clone);
+    const url = URL.createObjectURL(new Blob([src], { type: 'image/svg+xml' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `letter-morph_${safe(a)}-to-${safe(b)}_frame-${String(stepNum).padStart(2, '0')}-of-${totalSteps}.svg`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  // ───────── Wire up ─────────
+  const wordA = document.getElementById('word-a');
+  const wordB = document.getElementById('word-b');
+  const stepsInput = document.getElementById('steps');
+  const stepsNum = document.getElementById('steps-num');
+  const renderBtn = document.getElementById('render');
+  const metaA = document.getElementById('meta-a');
+  const metaB = document.getElementById('meta-b');
+
+  function showStatus(text, isErr) {
+    const strip = document.getElementById('strip');
+    strip.classList.remove('vertical');
+    strip.classList.add('horizontal');
+    strip.style.setProperty('--cols', '1');
+    strip.innerHTML = `<div class="status${isErr ? ' err' : ''}">${text}</div>`;
+  }
+
+  let renderToken = 0;
+  async function go() {
+    const a = wordA.value.trim() || ' ';
+    const b = wordB.value.trim() || ' ';
+    const fA = selA.value;
+    const fB = selB.value;
+    const steps = parseInt(stepsInput.value, 10) || 10;
+    metaA.textContent = FONT_LIB[fA].name;
+    metaB.textContent = FONT_LIB[fB].name;
+
+    const myToken = ++renderToken;
+    renderBtn.disabled = true;
+    showStatus('Computing morph…');
+    try {
+      const morph = await buildMorph({ wordA: a, wordB: b, fontKeyA: fA, fontKeyB: fB });
+      if (myToken !== renderToken) return;
+      renderStrip(morph, steps, FONT_LIB[fA].name, FONT_LIB[fB].name);
+    } catch (e) {
+      console.error(e);
+      if (myToken === renderToken) showStatus('Error: ' + (e && e.message ? e.message : String(e)), true);
+    } finally {
+      if (myToken === renderToken) renderBtn.disabled = false;
+    }
+  }
+
+  let debounceTimer;
+  function debouncedGo() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(go, 450);
+  }
+
+  wordA.addEventListener('input', debouncedGo);
+  wordB.addEventListener('input', debouncedGo);
+  selA.addEventListener('change', go);
+  selB.addEventListener('change', go);
+  stepsInput.addEventListener('input', () => {
+    stepsNum.textContent = stepsInput.value;
+    debouncedGo();
+  });
+  renderBtn.addEventListener('click', go);
+
+  // ───────── Custom typeface upload ─────────
+  // wawoff2 (Google's emscripten port) is fetched lazily on first .woff2 upload.
+  // It decompresses Brotli + restores the SFNT structure that opentype.js can parse.
+  let wawoff2Promise = null;
+  function getWawoff2() {
+    if (wawoff2Promise) return wawoff2Promise;
+    wawoff2Promise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/wawoff2@2.0.1/build/decompress_binding.js';
+      s.onload = () => {
+        if (!window.Module) return reject(new Error('wawoff2 loaded but Module global missing'));
+        window.Module().then(resolve, reject);
+      };
+      s.onerror = () => reject(new Error('Could not fetch wawoff2 decoder'));
+      document.head.appendChild(s);
+    });
+    return wawoff2Promise;
+  }
+
+  async function parseFontFile(file) {
+    const buf = await file.arrayBuffer();
+    if (file.name.toLowerCase().endsWith('.woff2')) {
+      showStatus('Decompressing WOFF2…');
+      const w = await getWawoff2();
+      const sfnt = w.decompress(new Uint8Array(buf));
+      const ab = sfnt.buffer.slice(sfnt.byteOffset, sfnt.byteOffset + sfnt.byteLength);
+      return opentype.parse(ab);
+    }
+    return opentype.parse(buf);
+  }
+
+  const customInput = document.getElementById('custom-font');
+  customInput.addEventListener('change', async () => {
+    const files = [...customInput.files];
+    customInput.value = '';
+    let lastKey = null;
+    for (const file of files) {
+      try {
+        const font = await parseFontFile(file);
+        const pickName = (rec) => rec && (rec.en || Object.values(rec)[0]);
+        const displayName = pickName(font.names.fullName)
+          || pickName(font.names.fontFamily)
+          || file.name.replace(/\.[^.]+$/, '');
+        const key = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        FONT_LIB[key] = { name: displayName + ' — Custom', font };
+        fontCache.set(key, Promise.resolve(font));
+        selA.appendChild(new Option(FONT_LIB[key].name, key));
+        selB.appendChild(new Option(FONT_LIB[key].name, key));
+        lastKey = key;
+      } catch (e) {
+        console.error('Could not parse font', file.name, e);
+        showStatus('Could not parse ' + file.name + ' — ' + (e && e.message ? e.message : e), true);
+        return;
+      }
+    }
+    if (lastKey) {
+      selB.value = lastKey;
+      go();
+    }
+  });
+
+  function ready() {
+    if (window.opentype && window.flubber) go();
+    else setTimeout(ready, 80);
+  }
+  ready();
+})();
+</script>
+
+</body>
+</html>
