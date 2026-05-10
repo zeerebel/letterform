@@ -1,0 +1,619 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Letterform — type morph strip</title>
+<script src="https://cdn.jsdelivr.net/npm/opentype.js@1.3.4/dist/opentype.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flubber@0.4.2/build/flubber.min.js"></script>
+<style>
+  :root {
+    --ink: #000;
+    --paper: #fff;
+    --rule: #000;
+    --mute: #6b6b6b;
+  }
+  * { box-sizing: border-box; }
+  html, body { background: var(--paper); color: var(--ink); margin: 0; }
+  body {
+    font-family: ui-serif, "Iowan Old Style", "Apple Garamond", Georgia, "Times New Roman", serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: geometricPrecision;
+  }
+
+  header {
+    border-bottom: 1px solid var(--rule);
+    padding: 28px 36px 22px;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+  header h1 {
+    font-family: "Times New Roman", Times, serif;
+    font-weight: 900;
+    font-size: 44px;
+    line-height: 0.95;
+    letter-spacing: -0.02em;
+    margin: 0;
+    font-style: italic;
+  }
+  header .meta {
+    font-family: ui-sans-serif, "Helvetica Neue", Arial, sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--mute);
+  }
+  header .meta b { color: var(--ink); font-weight: 700; }
+
+  main {
+    padding: 28px 36px 80px;
+  }
+
+  section.controls {
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 18px 24px;
+    border-bottom: 1px solid var(--rule);
+    padding-bottom: 24px;
+    margin-bottom: 28px;
+  }
+
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field.span-a { grid-column: span 5; }
+  .field.span-b { grid-column: span 5; }
+  .field.span-steps { grid-column: span 2; }
+  .field.span-font { grid-column: span 5; }
+  .field.span-go { grid-column: span 2; align-self: end; }
+
+  label {
+    font-family: ui-sans-serif, "Helvetica Neue", Arial, sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--mute);
+  }
+  label .num {
+    color: var(--ink);
+    font-weight: 700;
+    margin-left: 6px;
+  }
+
+  input[type="text"], select {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--rule);
+    padding: 6px 0 8px;
+    font-family: "Times New Roman", Times, serif;
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    border-radius: 0;
+    outline: none;
+  }
+  input[type="text"]:focus, select:focus {
+    border-bottom-color: var(--ink);
+    box-shadow: 0 1px 0 0 var(--ink);
+  }
+  select {
+    font-size: 18px;
+    font-weight: 600;
+    background-image: linear-gradient(45deg, transparent 50%, var(--ink) 50%), linear-gradient(135deg, var(--ink) 50%, transparent 50%);
+    background-position: calc(100% - 14px) 18px, calc(100% - 8px) 18px;
+    background-size: 6px 6px;
+    background-repeat: no-repeat;
+    padding-right: 24px;
+  }
+
+  input[type="range"] {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 22px;
+    background: transparent;
+    margin: 0;
+  }
+  input[type="range"]::-webkit-slider-runnable-track {
+    height: 1px;
+    background: var(--ink);
+  }
+  input[type="range"]::-moz-range-track {
+    height: 1px;
+    background: var(--ink);
+  }
+  input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--ink);
+    border-radius: 50%;
+    margin-top: -7px;
+  }
+  input[type="range"]::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: var(--ink);
+    border-radius: 50%;
+    border: none;
+  }
+
+  button#go {
+    width: 100%;
+    height: 48px;
+    background: var(--ink);
+    color: var(--paper);
+    border: 1px solid var(--ink);
+    font-family: ui-sans-serif, "Helvetica Neue", Arial, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+    font-size: 11px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+  button#go:hover { background: var(--paper); color: var(--ink); }
+  button#go:disabled { opacity: 0.4; cursor: progress; }
+
+  #status {
+    font-family: ui-sans-serif, "Helvetica Neue", Arial, sans-serif;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.18em;
+    color: var(--mute);
+    margin-bottom: 14px;
+    min-height: 14px;
+  }
+
+  /* Output strip */
+  #output {
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    padding: 0;
+    background: var(--paper);
+    display: grid;
+    gap: 0;
+  }
+  #output.horizontal {
+    grid-auto-flow: column;
+    grid-auto-columns: 1fr;
+  }
+  #output.vertical {
+    grid-auto-flow: row;
+    grid-auto-rows: 1fr;
+  }
+  #output .frame {
+    position: relative;
+    overflow: hidden;
+    background: var(--paper);
+  }
+  #output.horizontal .frame + .frame { border-left: 1px solid var(--rule); }
+  #output.vertical .frame + .frame { border-top: 1px solid var(--rule); }
+  #output .frame svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+  #output .frame .idx {
+    position: absolute;
+    top: 8px;
+    left: 10px;
+    font-family: ui-sans-serif, "Helvetica Neue", Arial, sans-serif;
+    font-size: 9px;
+    letter-spacing: 0.2em;
+    color: var(--mute);
+    text-transform: uppercase;
+  }
+
+  footer {
+    padding: 18px 36px 36px;
+    font-family: ui-sans-serif, "Helvetica Neue", Arial, sans-serif;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--mute);
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 900px) {
+    .field.span-a, .field.span-b, .field.span-font { grid-column: span 12; }
+    .field.span-steps { grid-column: span 8; }
+    .field.span-go { grid-column: span 4; }
+    header h1 { font-size: 32px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Letterform&nbsp;Morph<span style="font-style:normal">.</span></h1>
+  <div class="meta">
+    Static&nbsp;strip · Glyph&nbsp;outlines &times;&nbsp;path&nbsp;interpolation ·
+    <b id="meta-steps">10&nbsp;frames</b>
+  </div>
+</header>
+
+<main>
+  <section class="controls">
+    <div class="field span-a">
+      <label for="wordA">Word A</label>
+      <input id="wordA" type="text" value="form" autocomplete="off" spellcheck="false">
+    </div>
+    <div class="field span-b">
+      <label for="wordB">Word B</label>
+      <input id="wordB" type="text" value="loud" autocomplete="off" spellcheck="false">
+    </div>
+
+    <div class="field span-font">
+      <label for="fontA">Typeface A</label>
+      <select id="fontA"></select>
+    </div>
+    <div class="field span-font">
+      <label for="fontB">Typeface B</label>
+      <select id="fontB"></select>
+    </div>
+
+    <div class="field span-steps">
+      <label for="steps">Steps<span class="num" id="steps-val">10</span></label>
+      <input id="steps" type="range" min="2" max="24" value="10" step="1">
+    </div>
+
+    <div class="field span-go">
+      <button id="go" type="button">Render</button>
+    </div>
+  </section>
+
+  <div id="status"></div>
+  <div id="output" class="horizontal" aria-live="polite"></div>
+</main>
+
+<footer>
+  <span>opentype.js · flubber · fontsource</span>
+  <span>Black on white · Editorial</span>
+</footer>
+
+<script>
+(function () {
+  'use strict';
+
+  // Curated bold faces from Fontsource (WOFF, latin)
+  const FONTS = [
+    { name: 'Inter Bold',          slug: 'inter',            weight: '700' },
+    { name: 'Playfair Display Black', slug: 'playfair-display', weight: '900' },
+    { name: 'Archivo Black',       slug: 'archivo-black',    weight: '400' },
+    { name: 'Anton',               slug: 'anton',            weight: '400' },
+    { name: 'Oswald Bold',         slug: 'oswald',           weight: '700' },
+    { name: 'Bebas Neue',          slug: 'bebas-neue',       weight: '400' },
+    { name: 'Bowlby One',          slug: 'bowlby-one',       weight: '400' },
+    { name: 'Fjalla One',          slug: 'fjalla-one',       weight: '400' },
+    { name: 'Russo One',           slug: 'russo-one',        weight: '400' },
+    { name: 'Bungee',              slug: 'bungee',           weight: '400' },
+    { name: 'Alfa Slab One',       slug: 'alfa-slab-one',    weight: '400' },
+    { name: 'Rubik Mono One',      slug: 'rubik-mono-one',   weight: '400' },
+  ];
+
+  const fontUrl = f =>
+    `https://cdn.jsdelivr.net/npm/@fontsource/${f.slug}/files/${f.slug}-latin-${f.weight}-normal.woff`;
+
+  // ---- DOM ----
+  const $ = sel => document.querySelector(sel);
+  const fontASel = $('#fontA');
+  const fontBSel = $('#fontB');
+  const wordAIn  = $('#wordA');
+  const wordBIn  = $('#wordB');
+  const stepsIn  = $('#steps');
+  const stepsVal = $('#steps-val');
+  const metaSteps= $('#meta-steps');
+  const goBtn    = $('#go');
+  const status   = $('#status');
+  const output   = $('#output');
+
+  FONTS.forEach((f, i) => {
+    for (const sel of [fontASel, fontBSel]) {
+      const o = document.createElement('option');
+      o.value = i; o.textContent = f.name;
+      sel.appendChild(o);
+    }
+  });
+  fontASel.value = 1;   // Playfair Display Black
+  fontBSel.value = 2;   // Archivo Black
+
+  stepsIn.addEventListener('input', () => {
+    stepsVal.textContent = stepsIn.value;
+    metaSteps.innerHTML = `${stepsIn.value}&nbsp;frames`;
+  });
+
+  // ---- Font loading ----
+  const fontCache = new Map();
+  async function loadFont(idx) {
+    const f = FONTS[idx];
+    const key = f.slug + '|' + f.weight;
+    if (fontCache.has(key)) return fontCache.get(key);
+    setStatus(`Fetching ${f.name}…`);
+    const res = await fetch(fontUrl(f));
+    if (!res.ok) throw new Error(`Could not load ${f.name} (${res.status})`);
+    const buf = await res.arrayBuffer();
+    const font = opentype.parse(buf);
+    fontCache.set(key, font);
+    return font;
+  }
+
+  // ---- Path utilities ----
+
+  // Split a compound `d` string into subpaths. opentype.js emits absolute
+  // commands only, so each subpath begins with an uppercase M.
+  function splitSubpaths(d) {
+    if (!d) return [];
+    const matches = d.match(/M[^M]*/g) || [];
+    return matches.map(s => s.trim()).filter(Boolean);
+  }
+
+  // Sample N points along an SVG subpath using a hidden DOM element.
+  const sampleSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  sampleSvg.setAttribute('width', '0'); sampleSvg.setAttribute('height', '0');
+  sampleSvg.style.cssText = 'position:absolute;left:-9999px;top:-9999px;visibility:hidden;';
+  const samplePath = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  sampleSvg.appendChild(samplePath);
+  document.body.appendChild(sampleSvg);
+
+  function samplePoints(d, n) {
+    samplePath.setAttribute('d', d);
+    let total = 0;
+    try { total = samplePath.getTotalLength(); } catch (e) { total = 0; }
+    const pts = [];
+    if (!total || !isFinite(total)) return pts;
+    const step = total / n;
+    for (let i = 0; i < n; i++) {
+      const p = samplePath.getPointAtLength(i * step);
+      pts.push([p.x, p.y]);
+    }
+    return pts;
+  }
+
+  function polygonArea(pts) {
+    let a = 0;
+    for (let i = 0, n = pts.length; i < n; i++) {
+      const j = (i + 1) % n;
+      a += pts[i][0] * pts[j][1] - pts[j][0] * pts[i][1];
+    }
+    return Math.abs(a) / 2;
+  }
+
+  function polygonCentroid(pts) {
+    if (!pts.length) return [0, 0];
+    let cx = 0, cy = 0;
+    for (const [x, y] of pts) { cx += x; cy += y; }
+    return [cx / pts.length, cy / pts.length];
+  }
+
+  // Describe a subpath by its outline + meta.
+  function describeSub(d) {
+    const pts = samplePoints(d, 96);
+    return {
+      d,
+      area: polygonArea(pts),
+      centroid: polygonCentroid(pts),
+    };
+  }
+
+  // ---- Glyph layout ----
+  function layoutString(font, str, fontSize) {
+    const positions = [];
+    const scale = fontSize / font.unitsPerEm;
+    let x = 0;
+    for (const ch of str) {
+      const glyph = font.charToGlyph(ch);
+      positions.push({ glyph, x, advance: glyph.advanceWidth * scale });
+      x += glyph.advanceWidth * scale;
+    }
+    return { positions, width: x };
+  }
+
+  function safeBbox(p) {
+    const b = p.getBoundingBox();
+    if (!isFinite(b.x1) || !isFinite(b.x2) || !isFinite(b.y1) || !isFinite(b.y2)) return null;
+    if (b.x1 === b.x2 && b.y1 === b.y2) return null;
+    return b;
+  }
+
+  function unionBbox(a, b) {
+    if (!a) return b;
+    if (!b) return a;
+    return {
+      x1: Math.min(a.x1, b.x1), y1: Math.min(a.y1, b.y1),
+      x2: Math.max(a.x2, b.x2), y2: Math.max(a.y2, b.y2),
+    };
+  }
+
+  // ---- Per-glyph interpolators ----
+  // Returns array of t -> path-string functions for one character position.
+  function glyphInterpolators(glyphA, xA, glyphB, xB, fontSize) {
+    const dA = glyphA ? glyphA.getPath(xA, 0, fontSize).toPathData(2) : '';
+    const dB = glyphB ? glyphB.getPath(xB, 0, fontSize).toPathData(2) : '';
+
+    const subsA = splitSubpaths(dA).map(describeSub).filter(s => s.area > 0);
+    const subsB = splitSubpaths(dB).map(describeSub).filter(s => s.area > 0);
+
+    // Pair largest with largest, etc. (largest subpath = outline; smaller = counters)
+    subsA.sort((a, b) => b.area - a.area);
+    subsB.sort((a, b) => b.area - a.area);
+
+    const interps = [];
+    const n = Math.max(subsA.length, subsB.length);
+    const opts = { maxSegmentLength: 4 };
+
+    for (let i = 0; i < n; i++) {
+      const a = subsA[i], b = subsB[i];
+      if (a && b) {
+        try {
+          interps.push(flubber.interpolate(a.d, b.d, opts));
+        } catch (e) {
+          interps.push(t => (t < 0.5 ? a.d : b.d));
+        }
+      } else if (a && !b) {
+        // Vanish to a point near A's centroid.
+        try {
+          interps.push(flubber.toCircle(a.d, a.centroid[0], a.centroid[1], 0.5, opts));
+        } catch (e) {
+          interps.push(t => (t < 1 ? a.d : ''));
+        }
+      } else if (!a && b) {
+        // Appear from a point near B's centroid.
+        try {
+          interps.push(flubber.fromCircle(b.centroid[0], b.centroid[1], 0.5, b.d, opts));
+        } catch (e) {
+          interps.push(t => (t > 0 ? b.d : ''));
+        }
+      }
+    }
+    return interps;
+  }
+
+  // ---- Render ----
+  function setStatus(msg) { status.textContent = msg || ''; }
+
+  async function render() {
+    goBtn.disabled = true;
+    try {
+      const wordA = wordAIn.value;
+      const wordB = wordBIn.value;
+      const steps = parseInt(stepsIn.value, 10);
+      if (!wordA || !wordB) { setStatus('Need two words.'); return; }
+
+      const [fontA, fontB] = await Promise.all([
+        loadFont(parseInt(fontASel.value, 10)),
+        loadFont(parseInt(fontBSel.value, 10)),
+      ]);
+
+      setStatus('Building glyph paths…');
+      // Yield once so the status paints before heavy work.
+      await new Promise(r => requestAnimationFrame(r));
+
+      const fontSize = 240;
+      const layA = layoutString(fontA, wordA, fontSize);
+      const layB = layoutString(fontB, wordB, fontSize);
+
+      // Center each word horizontally inside the wider span so morph reads centered.
+      const maxW = Math.max(layA.width, layB.width);
+      const offA = (maxW - layA.width) / 2;
+      const offB = (maxW - layB.width) / 2;
+
+      const nChars = Math.max(wordA.length, wordB.length);
+      const pairs = [];
+      let bbox = null;
+
+      for (let i = 0; i < nChars; i++) {
+        const a = i < wordA.length ? layA.positions[i] : null;
+        const b = i < wordB.length ? layB.positions[i] : null;
+
+        // For unmatched positions, anchor to the OTHER word's slot so the
+        // vanishing/appearing point reads as belonging to that column.
+        const xA = a ? a.x + offA : (b ? b.x + offB : 0);
+        const xB = b ? b.x + offB : (a ? a.x + offA : 0);
+
+        const interps = glyphInterpolators(a && a.glyph, xA, b && b.glyph, xB, fontSize);
+        pairs.push({ interps });
+
+        if (a) {
+          const bb = safeBbox(a.glyph.getPath(xA, 0, fontSize));
+          if (bb) bbox = unionBbox(bbox, bb);
+        }
+        if (b) {
+          const bb = safeBbox(b.glyph.getPath(xB, 0, fontSize));
+          if (bb) bbox = unionBbox(bbox, bb);
+        }
+      }
+
+      if (!bbox) {
+        bbox = { x1: 0, y1: 0, x2: maxW || fontSize, y2: fontSize };
+      }
+
+      const padX = fontSize * 0.08;
+      const padY = fontSize * 0.18;
+      const vbX = bbox.x1 - padX;
+      const vbY = bbox.y1 - padY;
+      const vbW = (bbox.x2 - bbox.x1) + 2 * padX;
+      const vbH = (bbox.y2 - bbox.y1) + 2 * padY;
+      const viewBox = `${vbX.toFixed(2)} ${vbY.toFixed(2)} ${vbW.toFixed(2)} ${vbH.toFixed(2)}`;
+
+      // Layout flip: horizontal strip aspect = steps * (vbW/vbH)
+      const frameAspect = vbW / vbH;
+      const stripAspect = steps * frameAspect;
+      const vertical = stripAspect > 1.6;
+
+      output.classList.toggle('horizontal', !vertical);
+      output.classList.toggle('vertical', vertical);
+      output.innerHTML = '';
+
+      // Set output container dimensions so frames have a real height.
+      const containerW = output.clientWidth;
+      if (vertical) {
+        // Each frame is full-width; total height = steps × frame height (capped).
+        const frameH = containerW / frameAspect;
+        output.style.height = `${Math.min(steps * frameH, 6000)}px`;
+      } else {
+        const frameW = containerW / steps;
+        output.style.height = `${frameW / frameAspect}px`;
+      }
+
+      setStatus(`Rasterising ${steps} frames…`);
+      await new Promise(r => requestAnimationFrame(r));
+
+      const frag = document.createDocumentFragment();
+      for (let i = 0; i < steps; i++) {
+        const t = steps === 1 ? 0 : i / (steps - 1);
+        let combined = '';
+        for (const pair of pairs) {
+          for (const interp of pair.interps) {
+            const seg = interp(t);
+            if (seg) combined += ' ' + seg;
+          }
+        }
+        const frame = document.createElement('div');
+        frame.className = 'frame';
+        frame.innerHTML =
+          `<svg viewBox="${viewBox}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">` +
+            `<path d="${combined.trim()}" fill="#000" fill-rule="evenodd"/>` +
+          `</svg>` +
+          `<span class="idx">${String(i + 1).padStart(2, '0')} / ${String(steps).padStart(2, '0')}</span>`;
+        frag.appendChild(frame);
+      }
+      output.appendChild(frag);
+
+      setStatus(`${steps} frames · ${vertical ? 'vertical stack' : 'horizontal strip'} · ${wordA.length}×${wordB.length} glyphs`);
+    } catch (err) {
+      console.error(err);
+      setStatus('Error: ' + (err.message || err));
+    } finally {
+      goBtn.disabled = false;
+    }
+  }
+
+  goBtn.addEventListener('click', render);
+  // Re-render on Enter inside text inputs.
+  for (const el of [wordAIn, wordBIn]) {
+    el.addEventListener('keydown', e => { if (e.key === 'Enter') render(); });
+  }
+  // Re-render on selector / steps commit.
+  fontASel.addEventListener('change', render);
+  fontBSel.addEventListener('change', render);
+  stepsIn.addEventListener('change', render);
+
+  // Initial render once libs are ready.
+  function ready() {
+    if (window.opentype && window.flubber) render();
+    else setTimeout(ready, 80);
+  }
+  ready();
+})();
+</script>
+
+</body>
+</html>
