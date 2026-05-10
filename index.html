@@ -579,8 +579,36 @@
   renderBtn.addEventListener('click', go);
 
   // ───────── Custom typeface upload ─────────
-  // .woff2 files require Brotli decoding which opentype.js doesn't ship.
-  // Accept the picker entry but flag it on parse failure rather than silently dropping.
+  // wawoff2 (Google's emscripten port) is fetched lazily on first .woff2 upload.
+  // It decompresses Brotli + restores the SFNT structure that opentype.js can parse.
+  let wawoff2Promise = null;
+  function getWawoff2() {
+    if (wawoff2Promise) return wawoff2Promise;
+    wawoff2Promise = new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/wawoff2@2.0.1/build/decompress_binding.js';
+      s.onload = () => {
+        if (!window.Module) return reject(new Error('wawoff2 loaded but Module global missing'));
+        window.Module().then(resolve, reject);
+      };
+      s.onerror = () => reject(new Error('Could not fetch wawoff2 decoder'));
+      document.head.appendChild(s);
+    });
+    return wawoff2Promise;
+  }
+
+  async function parseFontFile(file) {
+    const buf = await file.arrayBuffer();
+    if (file.name.toLowerCase().endsWith('.woff2')) {
+      showStatus('Decompressing WOFF2…');
+      const w = await getWawoff2();
+      const sfnt = w.decompress(new Uint8Array(buf));
+      const ab = sfnt.buffer.slice(sfnt.byteOffset, sfnt.byteOffset + sfnt.byteLength);
+      return opentype.parse(ab);
+    }
+    return opentype.parse(buf);
+  }
+
   const customInput = document.getElementById('custom-font');
   customInput.addEventListener('change', async () => {
     const files = [...customInput.files];
@@ -588,8 +616,7 @@
     let lastKey = null;
     for (const file of files) {
       try {
-        const buf = await file.arrayBuffer();
-        const font = opentype.parse(buf);
+        const font = await parseFontFile(file);
         const pickName = (rec) => rec && (rec.en || Object.values(rec)[0]);
         const displayName = pickName(font.names.fullName)
           || pickName(font.names.fontFamily)
@@ -602,11 +629,7 @@
         lastKey = key;
       } catch (e) {
         console.error('Could not parse font', file.name, e);
-        showStatus(
-          'Could not parse ' + file.name +
-          (file.name.toLowerCase().endsWith('.woff2') ? ' (woff2 not supported — convert to woff or otf)' : ''),
-          true
-        );
+        showStatus('Could not parse ' + file.name + ' — ' + (e && e.message ? e.message : e), true);
         return;
       }
     }
