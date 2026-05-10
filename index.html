@@ -106,6 +106,17 @@
   .render-btn:hover { background: var(--paper); color: var(--ink); }
   .render-btn:disabled { opacity: 0.4; cursor: wait; }
 
+  .upload-btn {
+    display: block;
+    margin-top: 4px;
+    border: 1px dashed var(--ink);
+    background: var(--paper); color: var(--ink);
+    font-family: inherit; font-size: 9px; letter-spacing: 0.22em; text-transform: uppercase;
+    padding: 7px 10px; cursor: pointer; text-align: center;
+  }
+  .upload-btn:hover { background: var(--soft); }
+  .upload-btn input { display: none; }
+
   /* ───────── Strip ───────── */
   main {
     flex: 1;
@@ -221,6 +232,10 @@
       <div id="steps-num" class="steps-num">10</div>
     </div>
     <button id="render" class="render-btn">Render Morph</button>
+    <label class="upload-btn" title="Upload .otf / .ttf / .woff files — they appear in both dropdowns">
+      + Custom Typeface
+      <input id="custom-font" type="file" accept=".otf,.ttf,.woff,.woff2" multiple>
+    </label>
   </div>
 </section>
 
@@ -264,10 +279,10 @@
   const fontCache = new Map();
   function loadFont(key) {
     if (fontCache.has(key)) return fontCache.get(key);
-    const url = FONT_LIB[key].url;
-    const p = new Promise((res, rej) =>
-      opentype.load(url, (err, font) => err ? rej(err) : res(font))
-    );
+    const entry = FONT_LIB[key];
+    const p = entry.font
+      ? Promise.resolve(entry.font)
+      : new Promise((res, rej) => opentype.load(entry.url, (err, font) => err ? rej(err) : res(font)));
     fontCache.set(key, p);
     return p;
   }
@@ -562,6 +577,44 @@
     debouncedGo();
   });
   renderBtn.addEventListener('click', go);
+
+  // ───────── Custom typeface upload ─────────
+  // .woff2 files require Brotli decoding which opentype.js doesn't ship.
+  // Accept the picker entry but flag it on parse failure rather than silently dropping.
+  const customInput = document.getElementById('custom-font');
+  customInput.addEventListener('change', async () => {
+    const files = [...customInput.files];
+    customInput.value = '';
+    let lastKey = null;
+    for (const file of files) {
+      try {
+        const buf = await file.arrayBuffer();
+        const font = opentype.parse(buf);
+        const pickName = (rec) => rec && (rec.en || Object.values(rec)[0]);
+        const displayName = pickName(font.names.fullName)
+          || pickName(font.names.fontFamily)
+          || file.name.replace(/\.[^.]+$/, '');
+        const key = `custom-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        FONT_LIB[key] = { name: displayName + ' — Custom', font };
+        fontCache.set(key, Promise.resolve(font));
+        selA.appendChild(new Option(FONT_LIB[key].name, key));
+        selB.appendChild(new Option(FONT_LIB[key].name, key));
+        lastKey = key;
+      } catch (e) {
+        console.error('Could not parse font', file.name, e);
+        showStatus(
+          'Could not parse ' + file.name +
+          (file.name.toLowerCase().endsWith('.woff2') ? ' (woff2 not supported — convert to woff or otf)' : ''),
+          true
+        );
+        return;
+      }
+    }
+    if (lastKey) {
+      selB.value = lastKey;
+      go();
+    }
+  });
 
   function ready() {
     if (window.opentype && window.flubber) go();
